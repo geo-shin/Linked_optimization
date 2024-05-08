@@ -32,7 +32,8 @@ class EPSO(HgsPSO):
         Nbest          = math.inf
         i              = 0
         LogPosition    = {}
-        LogPosition[0] = self.WritePopDict(self.pop, best)
+        Logbest        = {}
+        Logfitvalue    = {}
 
         # setting tqdm for update progress
         pbar = tqdm.tqdm(range(self.generation),
@@ -199,20 +200,33 @@ class EPSO(HgsPSO):
                 if best is not None:
                     print(f'global best after updated : {best}\n')
                     print(f'global best value         : {best.fitness.values} \n')
-            LogPosition[g+1] = self.WritePopDict(self.pop, best)
 
+            LogPosition[g+1]  = self.WritePopDict(best, self.pop)
+            Logbest[g+1]      = self.WritePopDict(best, best)
+            bestfitval        = {'gbfit': best.fitness.values[0]}
+            Logfitvalue[g+1]  = self.WritePopDict(best, bestfitval)
+            
             # Save the particle data
             if not os.path.exists(f'{log_path}'):
                 os.makedirs(f'{log_path}')
 
+            # Copy save insert part
+            self.backup(log_path)
+
             with open(f'{log_path}{self.pso_name}log.pkl','wb') as fid:
                 pickle.dump(LogPosition,fid)
+
+            with open(f'{log_path}{self.pso_name}best.pkl','wb') as fid:
+                pickle.dump(Logbest,fid)
+
+            with open(f'{log_path}{self.pso_name}fit.pkl','wb') as fid:
+                 pickle.dump(Logfitvalue,fid)
 
             with open(f'{log_path}{self.pso_name}c1log.pkl','wb') as fid:
                 pickle.dump(self.logc1,fid)
 
             with open(f'{log_path}{self.pso_name}c2log.pkl','wb') as fid:
-                pickle.dump(self.logc2,fid)
+                pickle.dump(self.logc2,fid)            
 
             with open(f'{log_path}{self.pso_name}iwlog.pkl','wb') as fid:
                 pickle.dump(self.logiw,fid)

@@ -300,23 +300,7 @@ Gen solute: check limit
                 p.best = creator.Particle(p)
                 p.best.fitness.values = p.fitness.values
                 self.fit_best[idx] = p.best.fitness.values[0]
-                for fidx,fit in enumerate(self.fit_array['fit']):
-                    print('before:',self.fit_array)
-                    if fit == 0:
-                        self.fit_array['fit'][fidx] = p.fitness.values[0]
-                        self.fit_array['idx'][fidx] = idx
-                    elif fit > p.fitness.values[0] and p.fitness.values[0] not in self.fit_array['fit']:
-                        self.fit_array['fit'] = np.insert(self.fit_array['fit'], fidx, p.fitness.values[0])
-                        self.fit_array['idx'] = np.insert(self.fit_array['idx'], fidx, idx)
 
-                        self.fit_array['fit'] = np.delete(self.fit_array['fit'], -1)
-                        self.fit_array['idx'] = np.delete(self.fit_array['idx'], -1)
-                    print('after:',self.fit_array)
-
-                if verbose:
-                    if p.best is not None:
-                        print(f'\tlocal best after  : {p.best}')
-                        print(f'\tlocal best after  : {p.best.fitness.values}\n')
             else:
                 self.mchange[idx] += 1
                 if verbose:
@@ -437,8 +421,6 @@ Gen solute: check limit
             print(f'make directory {dest_dir}')
             shutil.copytree(f'{model_dir}', dest_dir,dirs_exist_ok=True)
         else:
-            command = f'cd {dest_dir} && ./clearall.sh'
-            os.system(command)
             pass # }}}
 
         if verbose: print('runHGS: Write contaminant_list information')  # {{{
@@ -503,11 +485,12 @@ end\n'''
             with open(os.path.join(dest_dir,Cfname),'w') as fid:
                 fid.write(C_lines)
         # }}}
-            
+
+        # {{{ HGS run
         retry_count = 0
         max_retries = 5
 
-        while retry_count <= max_retries: # {{{
+        while retry_count <= max_retries: 
             if verbose: 
                 print('runHGS: Run HGS.') 
 
@@ -528,9 +511,10 @@ end\n'''
             sys.exit("Error: Maximum number of retries reached. Exiting the code.")
 
             # }}}
-        if verbose: 
-            print(f'runHGS: Get results')  # {{{
-        print('copy start ======')
+
+        if verbose: # {{{ cost cal
+            print(f'runHGS: Get results')  
+
         total_cost = np.zeros((local_npop,))
         for idx, p in population.items():
             pindex = idx%local_npop
@@ -540,37 +524,10 @@ end\n'''
                 obs_conc = np.array(obs[well_name]['C'])
                 # 해당 입자, 용액, 및 well_name에 대한 파일 패턴 찾기
                 fname = os.path.join(dest_dir, f'{prefix}o.observation_well_conc.{well_name}.PCE{idx}.dat')
-                dataf  = os.path.join(dest_dir, '*.dat')
-                datafs = glob.glob(dataf)
                 target = '#I=IMAX#####'
 
                 if not os.path.isfile(fname):
                     raise Exception(f'ERROR: we cannot find {fname}')
-
-                print(self.fit_array)
-                # Check if idx is in fit_array
-                if idx in self.fit_array['idx']:
-                    print(f'idx : {idx}')
-                    # Add self.g to backupsubdir
-                    backupsubdir = os.path.join(backup_dir, f'g_{self.g}', f'idx_{idx}')
-                    print(backupsubdir)
-                    os.makedirs(backupsubdir, exist_ok=True)
-                    # Check if the file exists in the previous g directory
-                    prev_g_dir = os.path.join(backup_dir, f'g_{self.g - 1}', f'idx_{idx}')
-                    if self.g > 0 and os.path.exists(prev_g_dir):
-                        # If backupsubdir already exists, remove it
-                        if os.path.exists(backupsubdir):
-                            shutil.rmtree(backupsubdir)
-                        # Copy the directory and all its contents from the previous g directory
-                        shutil.copytree(prev_g_dir, backupsubdir)
-                    else:
-                        # Copy the file from dest_dir
-                        print('copy original')
-                        print(glob.glob(os.path.join(fname, '*')))
-                        for data in glob.glob(os.path.join(fname, '*')):
-                            print(data)
-                            shutil.copy2(data, f'{backupsubdir}/{os.path.basename(data)}')
-
                     
                 model_ts   = np.loadtxt(fname, skiprows=25)
                 model_time = model_ts[:,0]
@@ -584,7 +541,7 @@ end\n'''
                     total_cost[pindex] += math.sqrt((mconc-oconc)**2)
 
             if verbose:
-                print(f'runHGS: Total cost \n {total_cost}') # }}}
+                print(f'runHGS: Total cost \n {total_cost}') 
 
         if verbose: 
             print('runHGS: assign all cost in each poplulation')
@@ -592,15 +549,62 @@ end\n'''
         for (idx ,p), cost in zip(population.items(), total_cost):
             self.pop[idx].fitness.values = (cost,)
 
-        self.fitness = total_cost
-
+        self.fitness = total_cost # }}}
 
         if verbose:
             gtext = '       RUNHGS PART END POINT'
             self.declare(gtext) # }}}
 
-    def backup(self): # }}}
-        pass
+    def backup(self,log_path): # }}}
+        print(log_path)
+        curidx = None
+        curfit = None
+        bestfit = self.best.fitness.values[0]
+        for idx, p in  self.pop.items():
+            print(idx)
+            fit = p.fitness.values[0]
+            if fit == bestfit:
+                print(f'CURIDX = {idx}')
+                curidx = idx
+                curfit = fit
+            else:
+                pass
+
+        # Copy before dat dir
+        os.makedirs(f'{log_path}/BEST_DATA', exist_ok=True)
+
+        # If the directory already exists, remove it
+        if os.path.exists(f'{log_path}/BEST_DATA/{self.g}'):
+            shutil.rmtree(f'{log_path}/BEST_DATA/{self.g}')
+
+        # If g=0, make the directory and skip the copying
+        if self.g == 0:
+            os.makedirs(f'{log_path}/BEST_DATA/{self.g}', exist_ok=True)
+        else:
+            # Try to copy the directory
+            try:
+                shutil.copytree(f'{log_path}/BEST_DATA/{self.g-1}', f'{log_path}/BEST_DATA/{self.g}')
+            except FileNotFoundError:
+                pass
+
+        # 현재 인덱스가 None이 아닌 경우
+        if curidx is not None:
+            filepath = f'particles/{self.pso_name}'
+            fname_pattern = os.path.join(filepath, f'{self.prefix}o.observation_well_conc.*.PCE{curidx}.dat')
+
+            # glob를 사용하여 파일 패턴에 일치하는 모든 파일을 가져옵니다.
+            files = glob.glob(fname_pattern)
+            print(files)
+
+            # 각 파일에 대해
+            for file in files:
+                # 목표 디렉토리를 생성합니다. 이미 존재하는 경우 무시됩니다.
+                target_dir = f'{log_path}/BEST_DATA/{self.g}/{curfit}'
+                os.makedirs(target_dir, exist_ok=True)
+                print('copying---')
+
+                # 파일을 목표 디렉토리로 복사합니다.
+                shutil.copy(file, target_dir)
 
 
     def solve(self,Con_min:int=1.0e-5,criteria:int=50,verbose:bool=None, debug:bool=0): # {{{
@@ -679,6 +683,7 @@ end\n'''
             
             if debug:
                 self.verbose=1
+
             # Check the updated best particle information.
             if verbose:
                 print('update finished !\n')
@@ -693,6 +698,9 @@ end\n'''
             # Save the particle data
             if not os.path.exists(f'{log_path}'):
                 os.makedirs(f'{log_path}')
+
+            # Copy save insert part
+            self.backup(log_path)
 
             with open(f'{log_path}{self.pso_name}log.pkl','wb') as fid:
                 pickle.dump(LogPosition,fid)
