@@ -123,6 +123,7 @@ class HgsPSO:  # {{{
 npop       : {self.npop}
         '''
         return string # }}}
+
     def generate_solutes(self,verbose:bool=0, re:bool=0): # {{{
         '''
         Usage 
@@ -172,6 +173,7 @@ Gen solute: check limit
         self.source = slimits[firstkey][par].index
 
         grid_size = ceil(sqrt(self.npop))
+        print(grid_size)
         grid_indices = list(product(range(grid_size-1), repeat=len(self.source)))
 
         grid_idx_array = np.empty((len(self.source), self.npop), dtype=object)
@@ -182,6 +184,7 @@ Gen solute: check limit
                 grid_idx_array[source_idx][idx] = value
                 if not grid_indices:
                     grid_indices = list(product(range(grid_size-1), repeat=len(self.source)))
+        print(grid_indices)
 
         for idx in range(self.npop):
             # make instance for each particles
@@ -201,11 +204,15 @@ Gen solute: check limit
                     # Make random value between min & max
                     if key == 'loc' and col != 'z':
                         if col == 'x':
+                            print('yes')
                             grid_x = np.linspace(min_val[0], max_val[0],num=grid_size)
+                            print(grid_x)
                             xvalue = []
                             for j in range(len(self.source)):
                                 sidx  = grid_idx_array[j][idx][0]
+                                print('sidx', sidx)
                                 value = np.random.uniform(grid_x[sidx],grid_x[sidx+1])
+                                print(value)
                                 xvalue.append(value)
                             random_data[col] = xvalue
                         elif col == 'y':
@@ -218,6 +225,8 @@ Gen solute: check limit
                             random_data[col] = yvalue
                     else:
                         random_data[col] = np.random.uniform(min_val, max_val, size=max_val.shape)
+                        print(random_data)
+                print(random_data)
                 particles[key] = pd.DataFrame(random_data, index=max_df.index)
             particles.index = idx
 
@@ -580,7 +589,7 @@ end\n'''
         # 현재 인덱스가 None이 아닌 경우
         if curidx is not None:
             filepath = f'particles/{self.pso_name}'
-            fname_pattern = os.path.join(filepath, f'{self.prefix}o.observation_well_conc.*.PCE{curidx}.dat')
+            fname_pattern = os.path.join(filepath, f'*.PCE{curidx}.dat')
 
             # glob를 사용하여 파일 패턴에 일치하는 모든 파일을 가져옵니다.
             files = glob.glob(fname_pattern)

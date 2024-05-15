@@ -7,7 +7,7 @@ import random, copy, time, pandas, math, operator, pickle
 import tqdm
 import pandas as pd
 from scipy.optimize import linear_sum_assignment
-from deap import base, benchmarks, creator, tools
+from deap import base, creator, tools
 from math import sqrt, ceil
 from itertools import product, permutations
 
@@ -164,34 +164,25 @@ Gen solute: check limit
         slimits  = self.slimits
         firstkey = next(iter(slimits))
         keys     = slimits[firstkey].keys()
-
         for par in keys:
             if 'speed' in par:
                 pass
             else:
-                self.par.append(par)
-
+                if par not in self.par:
+                    self.par.append(par)
         self.source = slimits[firstkey][par].index
-        # Calculate the grid size
+
         grid_size = ceil(sqrt(self.npop))
-        
-        print(grid_size)
+        grid_indices = list(product(range(grid_size-1), repeat=len(self.source)))
 
-        # Generate all possible grid indices
-        grid_indices = [list(product(range(grid_size-1), repeat=2)) for _ in range(len(self.source))]
-
-        # Create a numpy array to store the grid indices for each source
         grid_idx_array = np.empty((len(self.source), self.npop), dtype=object)
         for source_idx in range(len(self.source)):
             for idx in range(self.npop):
-                # If all grid indices have been selected, refill the list
-                if not grid_indices[source_idx]:
-                    grid_indices[source_idx] = list(product(range(grid_size-1), repeat=2))
-
-                # Select a grid index that is not already in the numpy array
-                value = random.choice(grid_indices[source_idx])
-                grid_indices[source_idx].remove(value)
+                value = random.choice(grid_indices)
+                grid_indices.remove(value)
                 grid_idx_array[source_idx][idx] = value
+                if not grid_indices:
+                    grid_indices = list(product(range(grid_size-1), repeat=len(self.source)))
 
         for idx in range(self.npop):
             # make instance for each particles
@@ -202,38 +193,32 @@ Gen solute: check limit
                 min_df = slimits['min'][key]
                 random_data = {}
 
-                for col in max_df.columns:
+                for col in max_df.columns:    
                     self.columns.append(col)
                     columns      = set(self.columns)
                     self.columns = list(columns)
                     max_val = max_df[col].values
                     min_val = min_df[col].values
-
-                    # If the key is 'loc' and the column is not 'z', divide the space into grids and generate random data within the grid
+                    # Make random value between min & max
                     if key == 'loc' and col != 'z':
                         if col == 'x':
-                            grid_x = np.linspace(min_val[0], max_val[0], num=grid_size)
-                            grid_centers_x = (grid_x[:-1] + grid_x[1:]) / 2
+                            grid_x = np.linspace(min_val[0], max_val[0],num=grid_size)
                             xvalue = []
                             for j in range(len(self.source)):
                                 sidx  = grid_idx_array[j][idx][0]
-                                value = grid_centers_x[sidx]  # Use the center of the grid
+                                value = np.random.uniform(grid_x[sidx],grid_x[sidx+1])
                                 xvalue.append(value)
                             random_data[col] = xvalue
-
                         elif col == 'y':
-                            grid_y = np.linspace(min_val[0], max_val[0], num=grid_size)
-                            grid_centers_y = (grid_y[:-1] + grid_y[1:]) / 2
+                            grid_y = np.linspace(min_val[0], max_val[0],num=grid_size)
                             yvalue = []
                             for j in range(len(self.source)):
                                 sidx  = grid_idx_array[j][idx][1]
-                                value = grid_centers_y[sidx]  # Use the center of the grid
+                                value = np.random.uniform(grid_y[sidx], grid_y[sidx+1])
                                 yvalue.append(value)
                             random_data[col] = yvalue
                     else:
-                        # For other keys or the 'z' column, generate random data as before
                         random_data[col] = np.random.uniform(min_val, max_val, size=max_val.shape)
-
                 particles[key] = pd.DataFrame(random_data, index=max_df.index)
             particles.index = idx
 
@@ -243,12 +228,14 @@ Gen solute: check limit
                 particles.best  = None
 
             self.pop[idx]   = particles
+            
+        random.setstate(cur_state)
         self.initial = copy.deepcopy(self.pop)
         self.D = len(self.columns) * len(self.source)
 
         if verbose:
             gtext = 'GENERATE_SOLUTE PART END POINT'
-            
+
         # }}}
 
     def iteration(self,Niter:int,best,verbose:bool=None): # {{{
@@ -560,16 +547,15 @@ end\n'''
             gtext = '       RUNHGS PART END POINT'
             self.declare(gtext) # }}}
 
-    def backup(self,log_path): # }}}
-        print(log_path)
+    def backup(self,log_path): # {{{
         curidx = None
         curfit = None
         bestfit = self.best.fitness.values[0]
         for idx, p in  self.pop.items():
-            print(idx)
             fit = p.fitness.values[0]
             if fit == bestfit:
-                print(f'CURIDX = {idx}')
+                if self.verbose:
+                    print(f'CURIDX = {idx}')
                 curidx = idx
                 curfit = fit
             else:
@@ -595,22 +581,21 @@ end\n'''
         # 현재 인덱스가 None이 아닌 경우
         if curidx is not None:
             filepath = f'particles/{self.pso_name}'
-            fname_pattern = os.path.join(filepath, f'{self.prefix}o.observation_well_conc.*.PCE{curidx}.dat')
+            fname_pattern = os.path.join(filepath, f'*.PCE{curidx}.dat')
 
             # glob를 사용하여 파일 패턴에 일치하는 모든 파일을 가져옵니다.
             files = glob.glob(fname_pattern)
-            print(files)
 
             # 각 파일에 대해
             for file in files:
                 # 목표 디렉토리를 생성합니다. 이미 존재하는 경우 무시됩니다.
                 target_dir = f'{log_path}/BEST_DATA/{self.g}/{curfit}'
                 os.makedirs(target_dir, exist_ok=True)
-                print('copying---')
+                if self.verbose:
+                   print('copying---')
 
                 # 파일을 목표 디렉토리로 복사합니다.
-                shutil.copy(file, target_dir)
-
+                shutil.copy(file, target_dir) # }}}
 
     def solve(self,Con_min:int=1.0e-5,criteria:int=50,verbose:bool=None, debug:bool=0): # {{{
         '''
