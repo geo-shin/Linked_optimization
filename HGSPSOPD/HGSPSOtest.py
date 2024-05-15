@@ -217,7 +217,7 @@ Gen solute: check limit
                             xvalue = []
                             for j in range(len(self.source)):
                                 sidx  = grid_idx_array[j][idx][0]
-                                value = grid_centers_x[sidx]  # Use the center of the grid
+                                value = np.random.uniform(grid_x[sidx], grid_x[sidx+1])
                                 xvalue.append(value)
                             random_data[col] = xvalue
 
@@ -227,7 +227,7 @@ Gen solute: check limit
                             yvalue = []
                             for j in range(len(self.source)):
                                 sidx  = grid_idx_array[j][idx][1]
-                                value = grid_centers_y[sidx]  # Use the center of the grid
+                                value = np.random.uniform(grid_y[sidx], grid_y[sidx+1])
                                 yvalue.append(value)
                             random_data[col] = yvalue
                     else:
@@ -560,7 +560,7 @@ end\n'''
             gtext = '       RUNHGS PART END POINT'
             self.declare(gtext) # }}}
 
-    def backup(self,log_path): # }}}
+    def backup(self,log_path): # {{{
         print(log_path)
         curidx = None
         curfit = None
@@ -609,8 +609,9 @@ end\n'''
                 print('copying---')
 
                 # 파일을 목표 디렉토리로 복사합니다.
-                shutil.copy(file, target_dir)
-
+                shutil.copy(file, target_dir) 
+                
+                # }}}
 
     def solve(self,Con_min:int=1.0e-5,criteria:int=50,verbose:bool=None, debug:bool=0): # {{{
         '''
