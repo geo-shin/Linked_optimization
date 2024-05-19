@@ -6,4 +6,3 @@ from .HGSLIPs     import *
 from .HGSCLPSO    import *
 from .HGSTVAC     import *
 from .EPSO        import *
-from .HGSPSOtest  import *

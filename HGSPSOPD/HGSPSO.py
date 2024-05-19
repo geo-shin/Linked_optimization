@@ -164,27 +164,33 @@ Gen solute: check limit
         slimits  = self.slimits
         firstkey = next(iter(slimits))
         keys     = slimits[firstkey].keys()
+
         for par in keys:
             if 'speed' in par:
                 pass
             else:
                 if par not in self.par:
                     self.par.append(par)
+
         self.source = slimits[firstkey][par].index
 
+        # Calculate the grid size
         grid_size = ceil(sqrt(self.npop))
-        print(grid_size)
-        grid_indices = list(product(range(grid_size-1), repeat=len(self.source)))
 
+        # Generate all possible grid indices
+        grid_indices = [list(product(range(grid_size-1), repeat=2)) for _ in range(len(self.source))]
+
+        # Create a numpy array to store the grid indices for each source
         grid_idx_array = np.empty((len(self.source), self.npop), dtype=object)
         for source_idx in range(len(self.source)):
             for idx in range(self.npop):
-                value = random.choice(grid_indices)
-                grid_indices.remove(value)
+                # If all grid indices have been selected, refill the list
+                if not grid_indices[source_idx]:
+                    grid_indices = [list(product(range(grid_size-1), repeat=2)) for _ in range(len(self.source))]
+                # Select a grid index that is not already in the numpy array
+                value = random.choice(grid_indices[source_idx])
+                grid_indices[source_idx].remove(value)
                 grid_idx_array[source_idx][idx] = value
-                if not grid_indices:
-                    grid_indices = list(product(range(grid_size-1), repeat=len(self.source)))
-        print(grid_indices)
 
         for idx in range(self.npop):
             # make instance for each particles
@@ -195,28 +201,26 @@ Gen solute: check limit
                 min_df = slimits['min'][key]
                 random_data = {}
 
-                for col in max_df.columns:    
+                for col in max_df.columns:
                     self.columns.append(col)
                     columns      = set(self.columns)
                     self.columns = list(columns)
                     max_val = max_df[col].values
                     min_val = min_df[col].values
-                    # Make random value between min & max
+
+                    # If the key is 'loc' and the column is not 'z', divide the space into grids and generate random data within the grid
                     if key == 'loc' and col != 'z':
                         if col == 'x':
-                            print('yes')
-                            grid_x = np.linspace(min_val[0], max_val[0],num=grid_size)
-                            print(grid_x)
+                            grid_x = np.linspace(min_val[0], max_val[0], num=grid_size)
                             xvalue = []
                             for j in range(len(self.source)):
                                 sidx  = grid_idx_array[j][idx][0]
-                                print('sidx', sidx)
-                                value = np.random.uniform(grid_x[sidx],grid_x[sidx+1])
-                                print(value)
+                                value = np.random.uniform(grid_x[sidx], grid_x[sidx+1])
                                 xvalue.append(value)
                             random_data[col] = xvalue
+
                         elif col == 'y':
-                            grid_y = np.linspace(min_val[0], max_val[0],num=grid_size)
+                            grid_y = np.linspace(min_val[0], max_val[0], num=grid_size)
                             yvalue = []
                             for j in range(len(self.source)):
                                 sidx  = grid_idx_array[j][idx][1]
@@ -224,9 +228,9 @@ Gen solute: check limit
                                 yvalue.append(value)
                             random_data[col] = yvalue
                     else:
+                        # For other keys or the 'z' column, generate random data as before
                         random_data[col] = np.random.uniform(min_val, max_val, size=max_val.shape)
-                        print(random_data)
-                print(random_data)
+
                 particles[key] = pd.DataFrame(random_data, index=max_df.index)
             particles.index = idx
 
@@ -236,14 +240,12 @@ Gen solute: check limit
                 particles.best  = None
 
             self.pop[idx]   = particles
-            
-        random.setstate(cur_state)
         self.initial = copy.deepcopy(self.pop)
         self.D = len(self.columns) * len(self.source)
 
         if verbose:
             gtext = 'GENERATE_SOLUTE PART END POINT'
-
+            
         # }}}
 
     def iteration(self,Niter:int,best,verbose:bool=None): # {{{
@@ -633,6 +635,9 @@ end\n'''
             print('solve: Remove all pickle data set!.')
             os.system(f'rm {log_path}*.pkl')
 
+        if not os.path.exists(f'{log_path}'):
+            os.makedirs(f'{log_path}')
+
         # Main loop!
         for g in pbar:
             pbar.set_description(f'Processing ({g+1})')
@@ -672,6 +677,12 @@ end\n'''
             if verbose:
                 print(f' C1, C2, iw : {self.c1} / {self.c2} / {self.w}')
 
+            self.save_to_pickle(log_path, self.logc1, 'c1log.pkl')
+            self.save_to_pickle(log_path, self.logc2, 'c2log.pkl')
+            self.save_to_pickle(log_path, self.logiw, 'iwlog.pkl')
+            self.save_to_pickle(log_path, self.logf, 'flog.pkl')
+            self.save_to_pickle(log_path, self.initial, 'initial.pkl')
+
             for idx, p in self.pop.items():
                 if verbose:
                     gtext = 'UPDATE PART POINT'
@@ -688,51 +699,32 @@ end\n'''
                 if best is not None:
                     print(f'global best after updated : {best}\n')
                     print(f'global best value         : {best.fitness.values} \n')
-            LogPosition[g+1]  = self.WritePopDict(best, self.pop)
-            Logbest[g+1]      = self.WritePopDict(best, best)
             bestfitval        = {'gbfit': best.fitness.values[0]}
             Logfitvalue[g+1]  = self.WritePopDict(best, bestfitval)
-            
-            # Save the particle data
-            if not os.path.exists(f'{log_path}'):
-                os.makedirs(f'{log_path}')
+            self.save_to_pickle(log_path, Logfitvalue, 'fit.pkl')
 
             # Copy save insert part
             self.backup(log_path)
 
-            with open(f'{log_path}{self.pso_name}log.pkl','wb') as fid:
-                pickle.dump(LogPosition,fid)
+            if self.Ncrit:
+                i ,Nbest = self.regen(Nbest, best, i, self.Ncrit)
 
-            with open(f'{log_path}{self.pso_name}best.pkl','wb') as fid:
-                pickle.dump(Logbest,fid)
+            LogPosition[g+1]  = self.WritePopDict(best, self.pop)
+            Logbest[g+1]      = self.WritePopDict(best, best)
 
-            with open(f'{log_path}{self.pso_name}fit.pkl','wb') as fid:
-                 pickle.dump(Logfitvalue,fid)
-
-            with open(f'{log_path}{self.pso_name}c1log.pkl','wb') as fid:
-                pickle.dump(self.logc1,fid)
-
-            with open(f'{log_path}{self.pso_name}c2log.pkl','wb') as fid:
-                pickle.dump(self.logc2,fid)            
-
-            with open(f'{log_path}{self.pso_name}iwlog.pkl','wb') as fid:
-                pickle.dump(self.logiw,fid)
-
-            with open(f'{log_path}{self.pso_name}flog.pkl','wb') as fid:
-                pickle.dump(self.logf,fid)
-
-            with open(f'{log_path}{self.pso_name}initial.pkl','wb') as fid:
-                pickle.dump(self.initial,fid)
+            self.save_to_pickle(log_path, LogPosition, 'log.pkl')
+            self.save_to_pickle(log_path, Logbest, 'best.pkl')
 
             # Check the criteria
             if best.fitness.values[0] < Con_min:
                 print(' Opimization ended to Criteria')
                 break
 
-            if self.Ncrit:
-                i ,Nbest = self.regen(Nbest, best, i, self.Ncrit)
-
         # }}}
+
+    def save_to_pickle(self, log_path, data, filename): # {{{
+        with open(f'{log_path}{self.pso_name}{filename}','wb') as fid:
+            pickle.dump(data, fid) # }}}
 
     def regen(self,Nbest,best,i,Ncrit): # {{{
         if Nbest > best.fitness.values[0]:

@@ -59,6 +59,9 @@ class EPSO(HgsPSO):
         st_array  = np.random.randint(0, 5, size=self.npop, dtype=int)
         fit_array = np.zeros(self.npop, dtype=float)
 
+        if not os.path.exists(f'{log_path}'):
+            os.makedirs(f'{log_path}')
+
         # Main loop!
         for g in pbar:
             pbar.set_description(f'Processing ({g+1})')
@@ -152,6 +155,12 @@ class EPSO(HgsPSO):
             if verbose:
                 print(f' C1, C2, iw : {self.c1} / {self.c2} / {self.w}')
 
+            self.save_to_pickle(log_path, self.logc1, 'c1log.pkl')
+            self.save_to_pickle(log_path, self.logc2, 'c2log.pkl')
+            self.save_to_pickle(log_path, self.logiw, 'iwlog.pkl')
+            self.save_to_pickle(log_path, self.logf, 'flog.pkl')
+            self.save_to_pickle(log_path, self.initial, 'initial.pkl')
+
             for idx, part in self.pop.items():
                 if verbose:
                     gtext = 'UPDATE PART POINT'
@@ -194,6 +203,7 @@ class EPSO(HgsPSO):
                         gtext = ' CLPSO selected'
                         self.declare(gtext)
                     HgsCLPSO.updateParticle(self,part)
+
             # Check the updated best particle information.
             if verbose:
                 print('update finished !\n')
@@ -201,50 +211,26 @@ class EPSO(HgsPSO):
                     print(f'global best after updated : {best}\n')
                     print(f'global best value         : {best.fitness.values} \n')
 
-            LogPosition[g+1]  = self.WritePopDict(best, self.pop)
-            Logbest[g+1]      = self.WritePopDict(best, best)
             bestfitval        = {'gbfit': best.fitness.values[0]}
             Logfitvalue[g+1]  = self.WritePopDict(best, bestfitval)
-            
-            # Save the particle data
-            if not os.path.exists(f'{log_path}'):
-                os.makedirs(f'{log_path}')
+            self.save_to_pickle(log_path, Logfitvalue, 'fit.pkl')
 
             # Copy save insert part
             self.backup(log_path)
 
-            with open(f'{log_path}{self.pso_name}log.pkl','wb') as fid:
-                pickle.dump(LogPosition,fid)
-
-            with open(f'{log_path}{self.pso_name}best.pkl','wb') as fid:
-                pickle.dump(Logbest,fid)
-
-            with open(f'{log_path}{self.pso_name}fit.pkl','wb') as fid:
-                 pickle.dump(Logfitvalue,fid)
-
-            with open(f'{log_path}{self.pso_name}c1log.pkl','wb') as fid:
-                pickle.dump(self.logc1,fid)
-
-            with open(f'{log_path}{self.pso_name}c2log.pkl','wb') as fid:
-                pickle.dump(self.logc2,fid)            
-
-            with open(f'{log_path}{self.pso_name}iwlog.pkl','wb') as fid:
-                pickle.dump(self.logiw,fid)
-
-            with open(f'{log_path}{self.pso_name}flog.pkl','wb') as fid:
-                pickle.dump(self.logf,fid)
-
-            with open(f'{log_path}{self.pso_name}initial.pkl','wb') as fid:
-                pickle.dump(self.initial,fid)
+            if self.Ncrit:
+                i ,Nbest = self.regen(Nbest, best, i, self.Ncrit)
 
             ps_df.to_csv(f'{log_path}Pk_Sk_values.csv',index=False)           
+            LogPosition[g+1]  = self.WritePopDict(best, self.pop)
+            Logbest[g+1]      = self.WritePopDict(best, best)
+
+            self.save_to_pickle(log_path, LogPosition, 'log.pkl')
+            self.save_to_pickle(log_path, Logbest, 'best.pkl')
 
             # Check the criteria
             if best.fitness.values[0] < Con_min:
                 print(' Opimization ended to Criteria')
                 break
-
-            if self.Ncrit:
-                i ,Nbest = self.regen(Nbest, best, i, self.Ncrit)
  
         # }}}
