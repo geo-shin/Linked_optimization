@@ -38,6 +38,7 @@ class HgsPSO:  # {{{
         self.gpop           = {}
         self.seed           = seed
         self.best           = None
+        self.bestfit_pre    = math.inf
         self.FDRbest        = None
         self.LIbest         = None
         self.fai            = None
@@ -174,8 +175,10 @@ Gen solute: check limit
 
         self.source = slimits[firstkey][par].index
 
-        # Calculate the grid size
-        grid_size = ceil(sqrt(self.npop))
+        # eilculate the grid size
+        grid_size = min(ceil(sqrt(self.npop)), 7)
+        if verbose:
+            print('grid_size',grid_size)
         flux_size = 5
         flux_num  = len(slimits['min']['flux'].keys())
 
@@ -203,6 +206,51 @@ Gen solute: check limit
                 flux_indices[source_idx].remove(value)
                 grid_idx_array_flux[source_idx][idx] = value
 
+        if re:
+            bin_indices = [[None, None] for _ in range(len(self.source))]
+
+        if re:
+            print('now best',self.best.fitness.values[0])
+            print('previous',self.bestfit_pre)
+            if self.bestfit_pre > self.best.fitness.values[0]:
+                pass
+            else:
+                re = 0
+            self.bestfit_pre = self.best.fitness.values[0]
+
+        for key in keys:
+            max_df = slimits['max'][key]
+            min_df = slimits['min'][key]
+            random_data = {}
+            sp_num = 0
+
+            for col in max_df.columns:
+                self.columns.append(col)
+                columns      = set(self.columns)
+                self.columns = list(columns)
+                max_val = max_df[col].values
+                min_val = min_df[col].values
+                if re:
+                    if key == 'loc' and col != 'z':
+                        if col == 'x':
+                            grid_x = np.linspace(min_val[0], max_val[0], num=grid_size)
+                            for j in range(len(self.source)):
+                                bin_index = np.digitize(self.best[key][col][j], grid_x) - 1
+                                if bin_index == grid_size-1:
+                                    bin_index = bin_index -1
+                                bin_indices[j][0] = bin_index
+                                if verbose:
+                                    print(f"Value {self.best[key][col][j]} belongs to bin {bin_index} in grid_x")
+                                    print(self.best[key][col])
+                        elif col == 'y':
+                            grid_y = np.linspace(min_val[0], max_val[0], num=grid_size)
+                            for j in range(len(self.source)):
+                                bin_index = np.digitize(self.best[key][col][j], grid_y) - 1
+                                bin_indices[j][1] = bin_index
+                                if verbose:
+                                    print(f"Value {self.best[key][col][j]} belongs to bin {bin_index} in grid_x")
+                                    print(self.best[key][col])
+
         for idx in range(self.npop):
             # make instance for each particles
             particles = creator.Particle({})
@@ -219,15 +267,21 @@ Gen solute: check limit
                     self.columns = list(columns)
                     max_val = max_df[col].values
                     min_val = min_df[col].values
-
                     # If the key is 'loc' and the column is not 'z', divide the space into grids and generate random data within the grid
                     if key == 'loc' and col != 'z':
                         if col == 'x':
                             grid_x = np.linspace(min_val[0], max_val[0], num=grid_size)
                             xvalue = []
                             for j in range(len(self.source)):
+                                grid_x = np.linspace(min_val[0], max_val[0], num=grid_size)
+                                if re:
+                                    sidx = bin_indices[j][0]
+                                    min_re , max_re = grid_x[sidx] , grid_x[sidx+1]
+                                    grid_x = np.linspace(min_re, max_re, num=grid_size)
                                 sidx  = grid_idx_array[j][idx][0]
                                 value = (grid_x[sidx] + grid_x[sidx+1]) / 2
+                                if verbose:
+                                    print('value', value)
                                 xvalue.append(value)
                             random_data[col] = xvalue
 
@@ -235,6 +289,11 @@ Gen solute: check limit
                             grid_y = np.linspace(min_val[0], max_val[0], num=grid_size)
                             yvalue = []
                             for j in range(len(self.source)):
+                                grid_y = np.linspace(min_val[0], max_val[0], num=grid_size)
+                                if re:
+                                    sidx = bin_indices[j][1]
+                                    min_re , max_re = grid_y[sidx] , grid_y[sidx+1]
+                                    grid_y = np.linspace(min_re, max_re, num=grid_size)
                                 sidx  = grid_idx_array[j][idx][1]
                                 value = (grid_y[sidx] + grid_y[sidx+1]) / 2
                                 yvalue.append(value)

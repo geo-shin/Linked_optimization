@@ -145,8 +145,8 @@ npop       : {self.npop}
             # save best information
             for idx, p in self.pop.items():
                 self.ind_best[idx] = p
-                if self.verbose:
-                    print(self.ind_best)
+            if self.verbose:
+                print(f'self.ind_best : {self.ind_best}')
             random.seed(random.randint(0,self.generation))
             # reset dictionary
             self.pop = {} 
@@ -176,21 +176,32 @@ Gen solute: check limit
 
         # Calculate the grid size
         grid_size = ceil(sqrt(self.npop))
+        flux_size = 4
+        flux_num  = len(slimits['min']['flux'].keys())
 
         # Generate all possible grid indices
         grid_indices = [list(product(range(grid_size-1), repeat=2)) for _ in range(len(self.source))]
-
+        flux_indices = [list(product(range(flux_size-1), repeat=flux_num)) for _ in range(len(self.source))]
         # Create a numpy array to store the grid indices for each source
         grid_idx_array = np.empty((len(self.source), self.npop), dtype=object)
+        grid_idx_array_flux = np.empty((len(self.source), self.npop), dtype=object)
+
         for source_idx in range(len(self.source)):
             for idx in range(self.npop):
                 # If all grid indices have been selected, refill the list
                 if not grid_indices[source_idx]:
                     grid_indices = [list(product(range(grid_size-1), repeat=2)) for _ in range(len(self.source))]
+                if not flux_indices[source_idx]:
+                    flux_indices = [list(product(range(flux_size-1), repeat=flux_num)) for _ in range(len(self.source))]
+
                 # Select a grid index that is not already in the numpy array
                 value = random.choice(grid_indices[source_idx])
                 grid_indices[source_idx].remove(value)
                 grid_idx_array[source_idx][idx] = value
+
+                value = random.choice(flux_indices[source_idx])
+                flux_indices[source_idx].remove(value)
+                grid_idx_array_flux[source_idx][idx] = value
 
         for idx in range(self.npop):
             # make instance for each particles
@@ -200,6 +211,7 @@ Gen solute: check limit
                 max_df = slimits['max'][key]
                 min_df = slimits['min'][key]
                 random_data = {}
+                sp_num = 0
 
                 for col in max_df.columns:
                     self.columns.append(col)
@@ -215,7 +227,7 @@ Gen solute: check limit
                             xvalue = []
                             for j in range(len(self.source)):
                                 sidx  = grid_idx_array[j][idx][0]
-                                value = np.random.uniform(grid_x[sidx], grid_x[sidx+1])
+                                value = (grid_x[sidx] + grid_x[sidx+1]) / 2
                                 xvalue.append(value)
                             random_data[col] = xvalue
 
@@ -224,9 +236,19 @@ Gen solute: check limit
                             yvalue = []
                             for j in range(len(self.source)):
                                 sidx  = grid_idx_array[j][idx][1]
-                                value = np.random.uniform(grid_y[sidx], grid_y[sidx+1])
+                                value = (grid_y[sidx] + grid_y[sidx+1]) / 2
                                 yvalue.append(value)
                             random_data[col] = yvalue
+                    elif key == 'flux':
+                        if 'sp' in col:
+                            grid_sp = np.linspace(min_val[0], max_val[0], num=flux_size)
+                            fvalue = []
+                            for j in range(len(self.source)):
+                                sidx = grid_idx_array_flux[j][idx][sp_num]
+                                value = (grid_sp[sidx] + grid_sp[sidx+1]) / 2
+                                fvalue.append(value)
+                            random_data[col] = fvalue
+                        sp_num += 1
                     else:
                         # For other keys or the 'z' column, generate random data as before
                         random_data[col] = np.random.uniform(min_val, max_val, size=max_val.shape)
@@ -708,6 +730,8 @@ end\n'''
 
             if self.Ncrit:
                 i ,Nbest = self.regen(Nbest, best, i, self.Ncrit)
+                if self.verbose:
+                    print(f'i value: {i}')
 
             LogPosition[g+1]  = self.WritePopDict(best, self.pop)
             Logbest[g+1]      = self.WritePopDict(best, best)
@@ -738,11 +762,16 @@ end\n'''
             i += 1
 
         if i == Ncrit:
+            i = 0
             self.seed = None
-            self.generate_solutes(re=1)
             if self.verbose:
                 gtext = 'REGENERATE PARTICLES'
                 self.declare(gtext)
+                print(f'Before: {self.pop}')
+
+            self.generate_solutes(self.verbose, re=1)
+            if self.verbose:
+                print(f'After: {self.pop}')
         return i,Nbest
     # }}}
 
