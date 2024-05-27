@@ -105,10 +105,11 @@ class EPSO(HgsPSO):
             if g == 0:
                 pass
             else:
-                if verbose:
-                    gtext = 'INDEXING PART POINT'
-                    self.declare(gtext)
-                self.indexing()
+                pass
+               # if verbose:
+               #     gtext = 'INDEXING PART POINT'
+               #     self.declare(gtext)
+               # self.indexing()
             # adaptive & iw calculation
             if verbose:
                 gtext = 'ESE PART POINT'

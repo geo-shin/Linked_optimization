@@ -13,7 +13,7 @@ from itertools import product, permutations
 
 class HgsPSO:  # {{{
     def __init__(self, prefix, slimits, time_list, obs,
-            seed:int       =45,
+            seed:int       =100,
             model_dir:str  ='base_model',
             tem_path:str   ='tem_path',
             generation:int =1,
@@ -38,6 +38,7 @@ class HgsPSO:  # {{{
         self.gpop           = {}
         self.seed           = seed
         self.best           = None
+        self.bestfit_pre    = math.inf
         self.FDRbest        = None
         self.LIbest         = None
         self.fai            = None
@@ -64,11 +65,14 @@ class HgsPSO:  # {{{
         self.tem_path       = tem_path
 
         # set up control parameters
-        self.c1             = c1
-        self.c2             = c2
-        self.w_min          = w_min
-        self.w_max          = w_max
-        self.w              = w_max
+        self.loc_c1             = c1
+        self.loc_c2             = c2
+        self.flux_c1            = c1
+        self.flux_c2            = c2
+        self.loc_w              = w_max
+        self.flux_w             = w_max
+        self.w_min              = w_min
+        self.w_max              = w_max
         self.Previous_State = 'S1'
         self.rule_base      = pd.DataFrame(data=[['S3', 'S2', 'S2', 'S1', 'S1', 'S1', 'S4'],
                                             ['S3', 'S2', 'S2', 'S2', 'S1', 'S1', 'S4'],
@@ -76,10 +80,16 @@ class HgsPSO:  # {{{
                                             ['S3', 'S3', 'S2', 'S1', 'S1', 'S4', 'S4']])
         self.rule_base.columns = ['S3', 'S3&S2', 'S2', 'S2&S1', 'S1', 'S1&S4', 'S4']
         self.rule_base.index   = ['S1', 'S2', 'S3', 'S4']
-        self.logf  = np.zeros(self.generation)
-        self.logc1 = np.zeros(self.generation)
-        self.logc2 = np.zeros(self.generation) 
-        self.logiw = np.zeros(self.generation) 
+
+        self.logflux_iw = np.zeros(self.generation)
+        self.logflux_f  = np.zeros(self.generation)
+        self.logflux_c1 = np.zeros(self.generation)
+        self.logflux_c2 = np.zeros(self.generation)
+
+        self.logloc_f   = np.zeros(self.generation)
+        self.logloc_c1  = np.zeros(self.generation)
+        self.logloc_c2  = np.zeros(self.generation) 
+        self.logloc_iw  = np.zeros(self.generation) 
 
         # set up Comprehensive Learning
         self.pc      = np.zeros(self.npop)
@@ -103,6 +113,8 @@ class HgsPSO:  # {{{
         self.par            = []
         self.source         = []
         self.columns        = []
+        self.loc_col        = []
+        self.flux_col       = []
         # initialize creator
         self.creator        = creator
         self.creator.create("FitnessMin", base.Fitness, weights=(-1.0,))
@@ -142,12 +154,13 @@ npop       : {self.npop}
         self.ind_best = {}
 
         if re:
+            random.seed(random.randint(0, 2**10))
             # save best information
             for idx, p in self.pop.items():
-                self.ind_best[idx] = p
-            if self.verbose:
+                self.ind_best[idx] = p.best
+            if verbose:
                 print(f'self.ind_best : {self.ind_best}')
-            random.seed(random.randint(0,self.generation))
+                print(p.best)
             # reset dictionary
             self.pop = {} 
         else:
@@ -174,9 +187,11 @@ Gen solute: check limit
 
         self.source = slimits[firstkey][par].index
 
-        # Calculate the grid size
+        # eilculate the grid size
         grid_size = ceil(sqrt(self.npop))
-        flux_size = 4
+        if verbose:
+            print('grid_size',grid_size)
+        flux_size = 5
         flux_num  = len(slimits['min']['flux'].keys())
 
         # Generate all possible grid indices
@@ -203,6 +218,19 @@ Gen solute: check limit
                 flux_indices[source_idx].remove(value)
                 grid_idx_array_flux[source_idx][idx] = value
 
+        if re:
+            if self.bestfit_pre > self.best.fitness.values[0]:
+                re = 1
+            else:
+                re = 0
+            self.bestfit_pre = self.best.fitness.values[0]
+
+        for key in keys:
+            max_df = slimits['max'][key]
+            min_df = slimits['min'][key]
+            random_data = {}
+            sp_num = 0
+
         for idx in range(self.npop):
             # make instance for each particles
             particles = creator.Particle({})
@@ -217,9 +245,18 @@ Gen solute: check limit
                     self.columns.append(col)
                     columns      = set(self.columns)
                     self.columns = list(columns)
+                    if key == 'loc':
+                        self.loc_col.append(col)
+                        loc_col = set(self.loc_col)
+                        self.loc_col = list(loc_col)
+                    print(self.loc_col)
+                    if key == 'flux':
+                        self.flux_col.append(col)
+                        flux_col = set(self.flux_col)
+                        self.flux_col = list(flux_col)
+                    print(self.flux_col)
                     max_val = max_df[col].values
                     min_val = min_df[col].values
-
                     # If the key is 'loc' and the column is not 'z', divide the space into grids and generate random data within the grid
                     if key == 'loc' and col != 'z':
                         if col == 'x':
@@ -228,6 +265,8 @@ Gen solute: check limit
                             for j in range(len(self.source)):
                                 sidx  = grid_idx_array[j][idx][0]
                                 value = (grid_x[sidx] + grid_x[sidx+1]) / 2
+                                if verbose:
+                                    print('value', value)
                                 xvalue.append(value)
                             random_data[col] = xvalue
 
@@ -263,6 +302,7 @@ Gen solute: check limit
 
             self.pop[idx]   = particles
         self.initial = copy.deepcopy(self.pop)
+
         self.D = len(self.columns) * len(self.source)
 
         if verbose:
@@ -358,9 +398,6 @@ Gen solute: check limit
         '''
         random.seed(self.seed)
 
-        c1 = self.c1
-        c2 = self.c2
-
         best    = self.best
         limits  = self.slimits
         par     = self.par
@@ -375,6 +412,15 @@ Gen solute: check limit
         old_best    = copy.deepcopy(best)
 
         for i in par:
+            if i == 'loc':
+                c1 = self.loc_c1
+                c2 = self.loc_c2
+                iw = self.loc_w
+            elif i == 'flux':
+                c1 = self.flux_c1
+                c2 = self.flux_c2
+                iw = self.flux_w
+
             for j in part[i].index:
                 target = part[i].loc[j]
                 Gbest  = best[i].loc[j]
@@ -392,7 +438,7 @@ Gen solute: check limit
                 v_u1 = [a * (b - c) for a, b, c in zip(u1, Lbest, target)]
                 v_u2 = [a * (b - c) for a, b, c in zip(u2, Gbest, target)]
 
-                sp = [(self.w * a) + b + c for a, b, c in zip(speed, v_u1, v_u2)]
+                sp = [(iw * a) + b + c for a, b, c in zip(speed, v_u1, v_u2)]
 
                 for sidx, ms in enumerate(max_speed):
                     if abs(sp[sidx]) > abs(ms):
@@ -677,32 +723,42 @@ end\n'''
             if g == 0:
                 pass
             else:
-                if verbose:
-                    gtext = 'INDEXING PART POINT'
-                    self.declare(gtext)
-                self.indexing()
+                pass
+                #if verbose:
+                #    gtext = 'INDEXING PART POINT'
+                #    self.declare(gtext)
+                #self.indexing()
             # adaptive & iw calculation
             if verbose:
                 gtext = 'ESE PART POINT'
                 self.declare(gtext)
+
             if g == 0:
-                f = np.inf
+                flux_f = np.inf
+                loc_f  = np.inf
                 pass
             else:
-                f = self.EvolutionaryStateEstimation()
+                self.loc_c1, self.loc_c2, self.loc_w, loc_f  = self.EvolutionaryStateEstimation(self.loc_col, 'loc', self.loc_c1, self.loc_c2, self.loc_w)
+                self.flux_c1, self.flux_c2, self.flux_w, flux_f = self.EvolutionaryStateEstimation(self.flux_col, 'flux', self.flux_c1, self.flux_c2, self.flux_w)
 
-            self.logc1[g] = self.c1
-            self.logc2[g] = self.c2
-            self.logiw[g] = self.w
-            self.logf[g]  = f
 
-            if verbose:
-                print(f' C1, C2, iw : {self.c1} / {self.c2} / {self.w}')
+            # Flux and location logs
+            flux_logs = [('logflux_c1', self.flux_c1), ('logflux_c2', self.flux_c2), ('logflux_iw', self.flux_w), ('logflux_f', flux_f)]
+            loc_logs = [('logloc_c1', self.loc_c1), ('logloc_c2', self.loc_c2), ('logloc_iw', self.loc_w), ('logloc_f', loc_f)]
 
-            self.save_to_pickle(log_path, self.logc1, 'c1log.pkl')
-            self.save_to_pickle(log_path, self.logc2, 'c2log.pkl')
-            self.save_to_pickle(log_path, self.logiw, 'iwlog.pkl')
-            self.save_to_pickle(log_path, self.logf, 'flog.pkl')
+            # Print and save logs
+            for log_type, logs in [('Flux', flux_logs), ('Location', loc_logs)]:
+                for log_name, log_value in logs:
+                    # Update log
+                    getattr(self, log_name)[g] = log_value
+
+                    # Print verbose information
+                    if verbose:
+                        print(f'{log_type} - {log_name}: {log_value}')
+
+                    # Save log to pickle file
+                    self.save_to_pickle(log_path, getattr(self, log_name), f'{log_name}.pkl')
+
             self.save_to_pickle(log_path, self.initial, 'initial.pkl')
 
             for idx, p in self.pop.items():
@@ -870,26 +926,28 @@ end\n'''
 
         return toolbox  # }}}
 
-    def EvolutionaryStateEstimation(self): # {{{
+    def EvolutionaryStateEstimation(self, col, par, c1, c2, iw): # {{{
 
         # step 0: orgarnize particle and regulization
         d = np.zeros([self.npop,0])
-        for j in self.par:
-            key = self.pop[0][j].keys()
-            lloc = np.zeros([self.npop, len(key)])
-            for s in self.source:
-                for i in range(self.npop):
-                    lloc[i] = self.pop[i][j].loc[s]
-                mu  = np.mean(lloc, axis=0)
-                #print(f'mu : {mu}')
-                std = np.std(lloc, axis=0)
-                #print(f'std: {std}')
-                for i, istd in enumerate(std):
-                    if istd == 0:
-                        std[i] = 1.0e-10
-                nloc = (lloc - mu) / std
-                #print(f'nloc : {nloc}')
-                d = np.hstack((d, nloc))
+        j = par
+        key = col
+        print(key)
+        print(j)
+        lloc = np.zeros([self.npop, len(key)])
+        for s in self.source:
+            for i in range(self.npop):
+                lloc[i] = self.pop[i][j].loc[s]
+            mu  = np.mean(lloc, axis=0)
+            #print(f'mu : {mu}')
+            std = np.std(lloc, axis=0)
+            #print(f'std: {std}')
+            for i, istd in enumerate(std):
+                if istd == 0:
+                    std[i] = 1.0e-10
+            nloc = (lloc - mu) / std
+            #print(f'nloc : {nloc}')
+            d = np.hstack((d, nloc))
         #print(f' d : {d}')
         # step 1: calculate avg distance of all particle pair
         d1 = np.zeros(self.npop)
@@ -985,30 +1043,30 @@ end\n'''
         delta = np.random.uniform(low=0.05, high=0.1, size=2)
         
         if fstate=='S1': # Exploration
-            self.c1 = self.c1 + delta[0]
-            self.c2 = self.c2 - delta[1]
+            c1 = c1 + delta[0]
+            c2 = c2 - delta[1]
         elif fstate=='S2': # Exploitation
-            self.c1 = self.c1 + 0.5*delta[0]
-            self.c2 = self.c2 - 0.5*delta[1]
+            c1 = c1 + 0.5*delta[0]
+            c2 = c2 - 0.5*delta[1]
         elif fstate=='S3': # Convergence
-            self.c1 = self.c1 + 0.5*delta[0]
-            self.c2 = self.c2 + 0.5*delta[1]
+            c1 = c1 + 0.5*delta[0]
+            c2 = c2 + 0.5*delta[1]
         elif fstate=='S4': # Jumping Out
-            self.c1 = self.c1 - delta[0]
-            self.c2 = self.c2 + delta[1]
+            c1 = c1 - delta[0]
+            c2 = c2 + delta[1]
             
-        self.c1 = np.clip(self.c1, 1.5, 2.5)
-        self.c2 = np.clip(self.c2, 1.5, 2.5)
-
-        if (3.0<=self.c1+self.c2<=4.0)==False:
-            self.c1 = 4.0 * self.c1/(self.c1+self.c2)
-            self.c2 = 4.0 * self.c2/(self.c1+self.c2)
+        c1 = np.clip(c1, 1.5, 2.5)
+        c2 = np.clip(c2, 1.5, 2.5)
+        
+        if (3.0<=c1+c2<=4.0)==False:
+            c1 = 4.0 * c1/(c1+c2)
+            c2 = 4.0 * c2/(c1+c2)
 
         # step 6: calculate inertia weight
-        self.w = 1/(1+1.5*np.exp(-2.6*f))
-        self.w = np.clip(self.w, self.w_min, self.w_max)
+        iw = 1/(1+1.5*np.exp(-2.6*f))
+        iw = np.clip(iw, self.w_min, self.w_max)
 
-        return f # }}}
+        return c1, c2, iw, f  # }}}
 
     def indexing(self): # {{{
         # Based on 'loc' parameter indexing
