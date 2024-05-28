@@ -13,7 +13,7 @@ from itertools import product, permutations
 
 class HgsPSO:  # {{{
     def __init__(self, prefix, slimits, time_list, obs,
-            seed:int       =100,
+            seed:int       =5171,
             model_dir:str  ='base_model',
             tem_path:str   ='tem_path',
             generation:int =1,
@@ -191,7 +191,7 @@ Gen solute: check limit
         grid_size = ceil(sqrt(self.npop))
         if verbose:
             print('grid_size',grid_size)
-        flux_size = 5
+        flux_size = 3
         flux_num  = len(slimits['min']['flux'].keys())
 
         # Generate all possible grid indices
@@ -249,12 +249,10 @@ Gen solute: check limit
                         self.loc_col.append(col)
                         loc_col = set(self.loc_col)
                         self.loc_col = list(loc_col)
-                    print(self.loc_col)
                     if key == 'flux':
                         self.flux_col.append(col)
                         flux_col = set(self.flux_col)
                         self.flux_col = list(flux_col)
-                    print(self.flux_col)
                     max_val = max_df[col].values
                     min_val = min_df[col].values
                     # If the key is 'loc' and the column is not 'z', divide the space into grids and generate random data within the grid
@@ -807,10 +805,14 @@ end\n'''
             pickle.dump(data, fid) # }}}
 
     def regen(self,Nbest,best,i,Ncrit): # {{{
-        if Nbest > best.fitness.values[0]:
+        fitarray = []
+        for index, part in self.pop.items():
+            fitarray.append(part.fitness.values[0])
+        Minfit = min(fitarray)
+        if Nbest > Minfit:
             if self.verbose:
                 print(f' Nbest before : {Nbest}')
-            Nbest = best.fitness.values[0]
+            Nbest = Minfit
             if self.verbose:
                 print(f' Nbest updated : {Nbest}')
             i = 0
@@ -818,6 +820,8 @@ end\n'''
             i += 1
 
         if i == Ncrit:
+            Nbest = math.inf
+            print('Regen generation:', self.g)
             i = 0
             self.seed = None
             if self.verbose:
@@ -932,8 +936,6 @@ end\n'''
         d = np.zeros([self.npop,0])
         j = par
         key = col
-        print(key)
-        print(j)
         lloc = np.zeros([self.npop, len(key)])
         for s in self.source:
             for i in range(self.npop):

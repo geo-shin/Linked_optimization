@@ -88,9 +88,6 @@ class HgsFDR(HgsPSO):
         '''
         random.seed(self.seed)
 
-        c1 = self.c1
-        c2 = self.c2
-
         best    = self.best
         limits  = self.slimits
         par     = self.par
@@ -114,6 +111,14 @@ class HgsFDR(HgsPSO):
         old_best    = copy.deepcopy(best)
 
         for i in par:
+            if i == 'loc':
+                c1 = self.loc_c1
+                c2 = self.loc_c2
+                iw = self.loc_w
+            elif i == 'flux':
+                c1 = self.flux_c1
+                c2 = self.flux_c2
+                iw = self.flux_w
             for j in part[i].index:
                 target = part[i].loc[j]
                 Gbest  = best[i].loc[j]
@@ -133,7 +138,7 @@ class HgsFDR(HgsPSO):
                 v_u2 = [a * (b - c) for a, b, c in zip(u2, Gbest, target)]
                 v_u3 = [a * (b - c) for a, b, c in zip(u2, Fbest, target)]
 
-                sp = [(self.w * a) + b + c + d for a, b, c, d in zip(speed, v_u1, v_u2, v_u3)]
+                sp = [(iw * a) + b + c + d for a, b, c, d in zip(speed, v_u1, v_u2, v_u3)]
 
                 for sidx, ms in enumerate(max_speed):
                     if abs(sp[sidx]) > abs(ms):

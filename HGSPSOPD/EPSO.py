@@ -114,19 +114,32 @@ class EPSO(HgsPSO):
             if verbose:
                 gtext = 'ESE PART POINT'
                 self.declare(gtext)
+
             if g == 0:
-                f = np.inf
+                flux_f = np.inf
+                loc_f  = np.inf
                 pass
             else:
-                f = self.EvolutionaryStateEstimation()
+                self.loc_c1, self.loc_c2, self.loc_w, loc_f  = self.EvolutionaryStateEstimation(self.loc_col, 'loc', self.loc_c1, self.loc_c2, self.loc_w)
+                self.flux_c1, self.flux_c2, self.flux_w, flux_f = self.EvolutionaryStateEstimation(self.flux_col, 'flux', self.flux_c1, self.flux_c2, self.flux_w)
 
-            self.logc1[g] = self.c1
-            self.logc2[g] = self.c2
-            self.logiw[g] = self.w
-            self.logf[g]  = f
 
-            if verbose:
-                print(f' C1, C2, iw : {self.c1} / {self.c2} / {self.w}')
+            # Flux and location logs
+            flux_logs = [('logflux_c1', self.flux_c1), ('logflux_c2', self.flux_c2), ('logflux_iw', self.flux_w), ('logflux_f', flux_f)]
+            loc_logs = [('logloc_c1', self.loc_c1), ('logloc_c2', self.loc_c2), ('logloc_iw', self.loc_w), ('logloc_f', loc_f)]
+
+            # Print and save logs
+            for log_type, logs in [('Flux', flux_logs), ('Location', loc_logs)]:
+                for log_name, log_value in logs:
+                    # Update log
+                    getattr(self, log_name)[g] = log_value
+
+                    # Print verbose information
+                    if verbose:
+                        print(f'{log_type} - {log_name}: {log_value}')
+
+                    # Save log to pickle file
+                    self.save_to_pickle(log_path, getattr(self, log_name), f'{log_name}.pkl')
 
             #=======
             for idx, p in self.pop.items():
@@ -152,15 +165,6 @@ class EPSO(HgsPSO):
                         if verbose:
                             print(f'Strategy       : {st_selected}')
                             print(f'failure memory : {f_mem[st_selected]}')
-
-            if verbose:
-                print(f' C1, C2, iw : {self.c1} / {self.c2} / {self.w}')
-
-            self.save_to_pickle(log_path, self.logc1, 'c1log.pkl')
-            self.save_to_pickle(log_path, self.logc2, 'c2log.pkl')
-            self.save_to_pickle(log_path, self.logiw, 'iwlog.pkl')
-            self.save_to_pickle(log_path, self.logf, 'flog.pkl')
-            self.save_to_pickle(log_path, self.initial, 'initial.pkl')
 
             for idx, part in self.pop.items():
                 if verbose:

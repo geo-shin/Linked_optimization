@@ -22,9 +22,6 @@ class HgsTVAC(HgsPSO):
 
         random.seed(self.seed)
 
-        c1 = self.c1
-        c2 = self.c2
-
         best    = self.best
         limits  = self.slimits
         par     = self.par
@@ -39,6 +36,14 @@ class HgsTVAC(HgsPSO):
         #LI part insert
         
         for i in par:
+            if i == 'loc':
+                c1 = self.loc_c1
+                c2 = self.loc_c2
+                iw = self.loc_w
+            elif i == 'flux':
+                c1 = self.flux_c1
+                c2 = self.flux_c2
+                iw = self.flux_w
             for j in part[i].index:
                 target = part[i].loc[j]
                 Gbest  = best[i].loc[j]
