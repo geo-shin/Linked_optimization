@@ -65,6 +65,7 @@ class HgsPSO:  # {{{
         self.tem_path       = tem_path
 
         # set up control parameters
+        self.bprob              = 0.3
         self.loc_c1             = c1
         self.loc_c2             = c2
         self.flux_c1            = c1
@@ -445,13 +446,18 @@ Gen solute: check limit
                 part[f'{i}_speed'].loc[j] = sp
 
                 target = target + sp
-
                 for (tidx, maxs), mins in zip(enumerate(max_val), min_val):
                     if target[tidx] > maxs:
-                        target[tidx] = maxs
-                    elif target[tidx] < mins:
-                        target[tidx] = mins
+                        if random.random() < self.bprob:
+                            target[tidx] = maxs
+                        else:
+                            target[tidx] = random.uniform(mins, maxs)
 
+                    elif target[tidx] < mins:
+                        if random.random() < self.bprob:
+                            target[tidx] = mins
+                        else:
+                            target[tidx] = random.uniform(mins, maxs)
                 part[i].loc[j] = target
 
         part.best = old_pb

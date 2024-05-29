@@ -143,13 +143,18 @@ class HgsLIPs(HgsPSO):
                 part[f'{i}_speed'].loc[j] = sp
 
                 target = target + sp
-
                 for (tidx, maxs), mins in zip(enumerate(max_val), min_val):
                     if target[tidx] > maxs:
-                        target[tidx] = maxs
-                    elif target[tidx] < mins:
-                        target[tidx] = mins
+                        if random.random() < self.bprob:
+                            target[tidx] = maxs
+                        else:
+                            target[tidx] = random.uniform(mins, maxs)
 
+                    elif target[tidx] < mins:
+                        if random.random() < self.bprob:
+                            target[tidx] = mins
+                        else:
+                            target[tidx] = random.uniform(mins, maxs)
                 part[i].loc[j] = target
 
             part.best = old_pb
