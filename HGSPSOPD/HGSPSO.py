@@ -13,7 +13,7 @@ from itertools import product, permutations
 
 class HgsPSO:  # {{{
     def __init__(self, prefix, slimits, time_list, obs,
-            seed:int       =5171,
+            seed:int       =5697,
             model_dir:str  ='base_model',
             tem_path:str   ='tem_path',
             generation:int =1,
@@ -65,7 +65,7 @@ class HgsPSO:  # {{{
         self.tem_path       = tem_path
 
         # set up control parameters
-        self.bprob              = 0.3
+        self.bprob              = 0.7
         self.loc_c1             = c1
         self.loc_c2             = c2
         self.flux_c1            = c1
@@ -162,8 +162,11 @@ npop       : {self.npop}
             if verbose:
                 print(f'self.ind_best : {self.ind_best}')
                 print(p.best)
+            best_fit = self.best.fitness.values[0]
+            
             # reset dictionary
             self.pop = {} 
+            self.best = None
         else:
             self.pop = {}
 
@@ -220,11 +223,11 @@ Gen solute: check limit
                 grid_idx_array_flux[source_idx][idx] = value
 
         if re:
-            if self.bestfit_pre > self.best.fitness.values[0]:
+            if self.bestfit_pre > best_fit:
                 re = 1
             else:
                 re = 0
-            self.bestfit_pre = self.best.fitness.values[0]
+                self.bestfit_pre = best_fit
 
         for key in keys:
             max_df = slimits['max'][key]
@@ -292,6 +295,7 @@ Gen solute: check limit
                         random_data[col] = np.random.uniform(min_val, max_val, size=max_val.shape)
 
                 particles[key] = pd.DataFrame(random_data, index=max_df.index)
+
             particles.index = idx
 
             if re:
@@ -386,6 +390,7 @@ Gen solute: check limit
                 if verbose:
                     if best is not None:
                         print(f'\tglobal best after  : {best.fitness.values}\n')       
+                        print(f'\tglobal best        : {best}\n')
         if verbose:
             print("iteration : Update Chunk_size local populations\n")
         
@@ -436,9 +441,8 @@ Gen solute: check limit
 
                 v_u1 = [a * (b - c) for a, b, c in zip(u1, Lbest, target)]
                 v_u2 = [a * (b - c) for a, b, c in zip(u2, Gbest, target)]
-
+                
                 sp = [(iw * a) + b + c for a, b, c in zip(speed, v_u1, v_u2)]
-
                 for sidx, ms in enumerate(max_speed):
                     if abs(sp[sidx]) > abs(ms):
                         sp[sidx] = math.copysign(ms, sp[sidx])

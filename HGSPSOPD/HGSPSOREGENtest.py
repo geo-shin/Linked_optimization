@@ -13,10 +13,14 @@ from itertools import product, permutations
 
 class HgsPSO:  # {{{
     def __init__(self, prefix, slimits, time_list, obs,
-            seed:int       =100,
+            seed:int       =5697,
             model_dir:str  ='base_model',
             tem_path:str   ='tem_path',
             generation:int =1,
+            x_initial:float=400,
+            y_initial:float=400,
+            z_initial:float=0,
+            flux_initial:float=5.0e-7,
             npop:int       =100,
             verbose:bool   =True, 
             pso_name:str   ='pso',
@@ -65,6 +69,7 @@ class HgsPSO:  # {{{
         self.tem_path       = tem_path
 
         # set up control parameters
+        self.bprob              = 0.7
         self.loc_c1             = c1
         self.loc_c2             = c2
         self.flux_c1            = c1
@@ -102,6 +107,12 @@ class HgsPSO:  # {{{
         self.f_pbest = []
         self.pbest_f = None
         self.CLbest   = None
+
+        self.x_initial = x_initial
+        self.y_initial = y_initial
+        self.z_initial = z_initial
+        self.flux_initial = flux_initial
+
         # set up chunk_size
         self.chunk_size     = chunk_size
 
@@ -161,8 +172,11 @@ npop       : {self.npop}
             if verbose:
                 print(f'self.ind_best : {self.ind_best}')
                 print(p.best)
+            best_fit = self.best.fitness.values[0]
+            
             # reset dictionary
             self.pop = {} 
+            self.best = None
         else:
             self.pop = {}
 
@@ -191,7 +205,7 @@ Gen solute: check limit
         grid_size = ceil(sqrt(self.npop))
         if verbose:
             print('grid_size',grid_size)
-        flux_size = 5
+        flux_size = 3
         flux_num  = len(slimits['min']['flux'].keys())
 
         # Generate all possible grid indices
@@ -219,11 +233,11 @@ Gen solute: check limit
                 grid_idx_array_flux[source_idx][idx] = value
 
         if re:
-            if self.bestfit_pre > self.best.fitness.values[0]:
+            if self.bestfit_pre > best_fit:
                 re = 1
             else:
                 re = 0
-            self.bestfit_pre = self.best.fitness.values[0]
+                self.bestfit_pre = best_fit
 
         for key in keys:
             max_df = slimits['max'][key]
@@ -249,12 +263,10 @@ Gen solute: check limit
                         self.loc_col.append(col)
                         loc_col = set(self.loc_col)
                         self.loc_col = list(loc_col)
-                    print(self.loc_col)
                     if key == 'flux':
                         self.flux_col.append(col)
                         flux_col = set(self.flux_col)
                         self.flux_col = list(flux_col)
-                    print(self.flux_col)
                     max_val = max_df[col].values
                     min_val = min_df[col].values
                     # If the key is 'loc' and the column is not 'z', divide the space into grids and generate random data within the grid
@@ -293,6 +305,7 @@ Gen solute: check limit
                         random_data[col] = np.random.uniform(min_val, max_val, size=max_val.shape)
 
                 particles[key] = pd.DataFrame(random_data, index=max_df.index)
+
             particles.index = idx
 
             if re:
@@ -387,6 +400,7 @@ Gen solute: check limit
                 if verbose:
                     if best is not None:
                         print(f'\tglobal best after  : {best.fitness.values}\n')       
+                        print(f'\tglobal best        : {best}\n')
         if verbose:
             print("iteration : Update Chunk_size local populations\n")
         
@@ -437,9 +451,8 @@ Gen solute: check limit
 
                 v_u1 = [a * (b - c) for a, b, c in zip(u1, Lbest, target)]
                 v_u2 = [a * (b - c) for a, b, c in zip(u2, Gbest, target)]
-
+                
                 sp = [(iw * a) + b + c for a, b, c in zip(speed, v_u1, v_u2)]
-
                 for sidx, ms in enumerate(max_speed):
                     if abs(sp[sidx]) > abs(ms):
                         sp[sidx] = math.copysign(ms, sp[sidx])
@@ -447,13 +460,18 @@ Gen solute: check limit
                 part[f'{i}_speed'].loc[j] = sp
 
                 target = target + sp
-
                 for (tidx, maxs), mins in zip(enumerate(max_val), min_val):
                     if target[tidx] > maxs:
-                        target[tidx] = maxs
-                    elif target[tidx] < mins:
-                        target[tidx] = mins
+                        if random.random() < self.bprob:
+                            target[tidx] = maxs
+                        else:
+                            target[tidx] = random.uniform(mins, maxs)
 
+                    elif target[tidx] < mins:
+                        if random.random() < self.bprob:
+                            target[tidx] = mins
+                        else:
+                            target[tidx] = random.uniform(mins, maxs)
                 part[i].loc[j] = target
 
         part.best = old_pb
@@ -476,6 +494,8 @@ Gen solute: check limit
         timelist   = self.time_list
         ntime      = len(timelist)
         model_dir  = self.model_dir
+
+
 
         # setup initial grok and hgs name
         dest_dir = f'./particles/{pso_name}'  # particle_index 추가
@@ -535,9 +555,9 @@ end\n'''
             C_tem   = ''
             
             for sidx in p[firstkey].index:
-                replacements = {'L1': p['loc'].loc[sidx]['x'],
-                                'L2': p['loc'].loc[sidx]['y'],
-                                'L3': p['loc'].loc[sidx]['z'],
+                replacements = {'L1': p['loc'].loc[sidx]['x'] + self.x_initial,
+                                'L2': p['loc'].loc[sidx]['y'] + self.y_initial,
+                                'L3': p['loc'].loc[sidx]['z'] + self.z_initial,
                                 'ntime': ntime}
                 C_tem = '\n'+self.read_tem(replacements)+'\n'
 
@@ -545,7 +565,7 @@ end\n'''
                 for flux, time in zip(p['flux'].loc[sidx], timelist):
                     fidx = pindex%local_npop
                     C_tem += f'{time[0]} {time[1]}' 
-                    fluxarray[fidx]=flux
+                    fluxarray[fidx]=flux + self.flux_initial
                     fluxstr = ' '.join(map(str, fluxarray))
                     C_tem += f' {fluxstr}'
                     C_tem += '\n'
@@ -807,10 +827,14 @@ end\n'''
             pickle.dump(data, fid) # }}}
 
     def regen(self,Nbest,best,i,Ncrit): # {{{
-        if Nbest > best.fitness.values[0]:
+        fitarray = []
+        for index, part in self.pop.items():
+            fitarray.append(part.fitness.values[0])
+        Minfit = min(fitarray)
+        if Nbest > Minfit:
             if self.verbose:
                 print(f' Nbest before : {Nbest}')
-            Nbest = best.fitness.values[0]
+            Nbest = Minfit
             if self.verbose:
                 print(f' Nbest updated : {Nbest}')
             i = 0
@@ -818,6 +842,8 @@ end\n'''
             i += 1
 
         if i == Ncrit:
+            Nbest = math.inf
+            print('Regen generation:', self.g)
             i = 0
             self.seed = None
             if self.verbose:
@@ -932,8 +958,6 @@ end\n'''
         d = np.zeros([self.npop,0])
         j = par
         key = col
-        print(key)
-        print(j)
         lloc = np.zeros([self.npop, len(key)])
         for s in self.source:
             for i in range(self.npop):
